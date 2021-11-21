@@ -2,12 +2,15 @@ import User from '../models/userModel.mjs'
 import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import  jwt  from 'jsonwebtoken'
-
+import nodemailer from 'nodemailer'
 import dotenv from 'dotenv'
 
 dotenv.config()
 const SECRET = process.env.SECRET_KEY
-
+const HOST =  process.env.SMTP_HOST
+const PORT =  process.env.SMTP_PORT
+const USER =  process.env.SMTP_USER
+const PASS =  process.env.SMTP_PASS
 
 
 export const signin = async (req, res)=> {
@@ -87,4 +90,52 @@ export const resetPassword = async(req,res)=>{
 
 export const forgotPassword=(req,res)=>{
     const {email} = req.body
+
+
+       // NODEMAILER TRANSPORT FOR SENDING POST NOTIFICATION VIA EMAIL
+
+       const transporter = nodemailer.createTransport({
+           host : HOST,
+           port:PORT,
+           auth:{
+               user:USER,
+               pass:PASS
+
+           },
+           tls:{
+               rejectUnauthorized:false
+           }
+
+
+       })
+       crypto.randomBytes(32,(err,buffer)=>{
+           if(err){
+               console.log(err);
+           }
+           const token = buffer.toString('hex')
+           User.findOne({email:email})
+           .then(user=>{
+               if(!user){
+                return res.status(422).json({error:"User does not exist in our database"})
+               }
+               user.resetToken = token
+               user.expireToken = Date.now() + 3600000
+               user.save().then((result)=>{
+                transporter.sendMail({
+                    to:user.email,
+                    from:"Arc Invoice <hello@invoice.com>",
+                    subject:"Password reset request",
+                    html:`
+                    <p>You requested for password reset from Arc Invoicing application</p>
+                    <h5>Please click this <a href="https://invoice.com/reset/${token}">link</a> to reset your password</h5>
+                    <p>Link not clickable?, copy and paste the following url in your address bar.</p>
+                    <p>https://invoice.com/reset/${token}</p>
+                    <P>If this was a mistake, just ignore this email and nothing will happen.</P>
+                    `
+                })
+                res.json({message:"check your email"})
+            }).catch((err) => console.log(err))
+  
+           })
+       })
 }
